@@ -1,8 +1,8 @@
 # PNP Markets - Solana Prediction Markets
 
-Create and trade prediction markets on Solana with any SPL token collateral.
+Create and managed prediction markets on Solana with any SPL token collateral. This skill is built using the [PNP SDK](https://www.npmjs.com/package/pnp-sdk) for Solana.
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 cd scripts
@@ -12,10 +12,10 @@ npm install
 export PRIVATE_KEY=<your_solana_private_key>
 export RPC_URL=https://api.mainnet-beta.solana.com
 
-# Create a market
+# Create a market (V2 AMM)
 npx ts-node create-market.ts \
-  --question "Will BTC hit $100k?" \
-  --duration 168 \
+  --question "Will SOL hit $250 by end of Feb?" \
+  --duration 720 \
   --liquidity 100
 
 # Trade on a market
@@ -25,22 +25,32 @@ npx ts-node trade.ts --buy --market <address> --outcome YES --amount 10
 npx ts-node trade.ts --info --market <address>
 ```
 
-## Features
+## ✨ Features
 
-- **V2 AMM Markets**: Automated market making with virtual liquidity
-- **P2P Markets**: Direct peer-to-peer betting
-- **Any SPL Token**: Use USDC, USDT, SOL, or custom tokens as collateral
-- **Fast & Cheap**: Solana's sub-second finality and low fees
+- **V2 AMM Markets**: Automated market making with virtual liquidity for instant trading.
+- **P2P Markets**: Direct peer-to-peer betting with custom sides and caps.
+- **Any SPL Token**: Use USDC, USDT, SOL, or any custom SPL token as collateral.
+- **High Performance**: Leverages Solana's sub-second finality and ultra-low fees.
+- **Custom Oracles**: Support for setting up and settling markets with custom oracle logic.
 
-## Documentation
+## 📊 Live Verification (Mainnet)
 
-- [SKILL.md](SKILL.md) - Complete usage guide
-- [references/api-reference.md](references/api-reference.md) - SDK API documentation
-- [references/examples.md](references/examples.md) - Code examples
-- [references/use-cases.md](references/use-cases.md) - Use case patterns
+This codebase has been verified on Solana Mainnet:
+- **Test Market**: `HxnpHygK1v7TqodWqAv6RvcEiK9zxAgw5jPZ6rskgj2E`
+- **Verification Signature**: [3Uo6Z6NN...EMY1](https://solscan.io/tx/3Uo6Z6NN3hfgK9o2j6kLUjLpx7UUVhxyMTPPdGMw9dhrMZb17pXAwio1omcwdVJH7ijEr692FnqevMAMH3K8EMY1)
 
-## Requirements
+## 📖 Documentation
 
-- Node.js 18+
-- Solana wallet with SOL for fees
-- Collateral tokens (USDC, etc.)
+- [SKILL.md](SKILL.md) - **Complete Usage Guide** (Setup, Scripts, Troubleshooting)
+- [references/api-reference.md](references/api-reference.md) - SDK API Documentation
+- [references/examples.md](references/examples.md) - Advanced Code Examples
+- [references/use-cases.md](references/use-cases.md) - Prediction Market Patterns
+
+## 🛠️ Requirements
+
+- **Node.js**: 18.x or higher
+- **Wallet**: Solana wallet with SOL for transaction fees
+- **Collateral**: USDC or other SPL tokens for market liquidity
+
+---
+Built with 💜 by PNP Protocol.

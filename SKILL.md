@@ -1,167 +1,84 @@
 ---
 name: pnp-markets-solana
-description: Create, trade, and settle permissionless prediction markets on Solana with any SPL token collateral. Use when building prediction market infrastructure, running contests, crowdsourcing probability estimates, adding utility to tokens, or tapping into true information finance via market-based forecasting.
+description: Create, trade, and settle permissionless prediction markets on Solana Mainnet with any SPL token collateral. Use when building prediction market infrastructure, running contests, crowdsourcing probability estimates, adding utility to tokens, or tapping into true information finance via market-based forecasting.
 ---
 
 # PNP Markets (Solana)
 
-Create and manage prediction markets on Solana Mainnet with any SPL token collateral.
+Create and manage prediction markets on Solana Mainnet with any SPL token collateral. Optimized for high-throughput, low-latency, and permissionless operation.
 
-## Quick Decision
+## 🏗️ Market Creation Flow
 
-```
-Need prediction markets?
-├─ Create market     → npx ts-node scripts/create-market.ts --help
-├─ Trade (buy/sell)  → npx ts-node scripts/trade.ts --help
-├─ Settle market     → npx ts-node scripts/settle.ts --help
-└─ Redeem winnings   → npx ts-node scripts/redeem.ts --help
-```
+Solana prediction markets support two primary architectures:
 
-## Environment
+1. **V2 AMM Markets (Default)**: Use Automated Market Makers with virtual liquidity. Best for publicly traded markets.
+2. **P2P Markets**: Direct peer-to-peer betting where the creator takes one side. Best for private or specific bets.
+
+### Quick Start (CLI)
 
 ```bash
-export PRIVATE_KEY=<solana_wallet_private_key>  # Required (base58)
-export RPC_URL=<solana_rpc_endpoint>            # Optional (defaults to mainnet)
-```
-
-For production, use a dedicated RPC (Helius, QuickNode, Alchemy) to avoid rate limits.
-
-## Scripts
-
-Run any script with `--help` first to see all options.
-
-### Create Market
-
-```bash
-# V2 AMM Market (default)
+# V2 AMM Market (using 100 USDC liquidity)
 npx ts-node scripts/create-market.ts \
-  --question "Will ETH reach $10k by Dec 2025?" \
-  --duration 168 \
+  --question "Will Solana hit $300 in 2026?" \
+  --duration 720 \
   --liquidity 100
 
-# P2P Market
+# P2P Market (Betting YES with 50 USDC)
 npx ts-node scripts/create-market.ts \
-  --question "Will proposal pass?" \
+  --question "Will our team win the hackathon?" \
   --duration 168 \
-  --liquidity 100 \
+  --liquidity 50 \
   --type p2p \
   --side yes
 ```
 
-Options: `--collateral <USDC|USDT|SOL|mint>`, `--decimals <n>`, `--type <v2|p2p>`, `--side <yes|no>`
+## ⚙️ Environment Configuration
 
-### Trade
-
-```bash
-# Buy YES tokens
-npx ts-node scripts/trade.ts --buy --market <address> --outcome YES --amount 10
-
-# Sell NO tokens  
-npx ts-node scripts/trade.ts --sell --market <address> --outcome NO --amount 5
-
-# View prices only
-npx ts-node scripts/trade.ts --info --market <address>
-```
-
-### Settle
+Ensure your environment variables are set before running scripts:
 
 ```bash
-# Settle as YES winner
-npx ts-node scripts/settle.ts --market <address> --outcome YES
-
-# Check status
-npx ts-node scripts/settle.ts --status --market <address>
+export PRIVATE_KEY=<base58_private_key>  # Required for signing transactions
+export RPC_URL=https://api.mainnet-beta.solana.com # Recommended: QuickNode/Helius
 ```
 
-### Redeem
+## 🛠️ Core Scripts usage
 
-```bash
-npx ts-node scripts/redeem.ts --market <address>
-```
+### 1. Market Operations (`create-market.ts`)
+Creates a new market account on-chain.
+- **Parameters**: `--question`, `--duration` (hours), `--liquidity`, `--type` (v2|p2p), `--collateral` (USDC|SOL).
+- **Output**: Returns the `Market Address` and `Transaction Signature`.
 
-## Programmatic Usage
+### 2. Trading (`trade.ts`)
+Swap collateral for YES/NO outcome tokens.
+- **Buy**: `npx ts-node scripts/trade.ts --buy --market <address> --outcome YES --amount 10`
+- **Info**: `npx ts-node scripts/trade.ts --info --market <address>` (Fetches current prices)
 
-```typescript
-import { PNPClient } from "pnp-sdk";
-import { PublicKey } from "@solana/web3.js";
+### 3. Settlement (`settle.ts`)
+Determines the winner. Only callable by the designated oracle (usually the market creator).
+- **Action**: `npx ts-node scripts/settle.ts --market <address> --outcome YES`
 
-const client = new PNPClient(
-  process.env.RPC_URL || "https://api.mainnet-beta.solana.com",
-  process.env.PRIVATE_KEY!
-);
+### 4. Redemption (`redeem.ts`)
+Convert winning outcome tokens back into collateral.
+- **Action**: `npx ts-node scripts/redeem.ts --market <address>`
 
-// Create V2 AMM market
-const { market, signature } = await client.market.createMarket({
-  question: "Will X happen?",
-  endTime: BigInt(Math.floor(Date.now() / 1000) + 86400 * 7),
-  initialLiquidity: 100_000_000n, // 100 USDC
-  baseMint: new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
-});
+## 🪙 Supported Collateral
 
-// Trade
-await client.trading.buyTokensUsdc({
-  market,
-  buyYesToken: true,
-  amountUsdc: 10,
-});
+Markets can be created with any SPL token. Pre-configured aliases:
 
-// Get prices
-const prices = await client.getMarketPriceV2(market);
+| Alias | Mint Address | Decimals |
+|-------|--------------|----------|
+| **USDC** | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | 6 |
+| **SOL** | `So11111111111111111111111111111111111111112` | 9 |
+| **USDT** | `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` | 6 |
 
-// Settle (for custom oracle markets)
-await client.settleMarket({ market, yesWinner: true });
+## 💡 Troubleshooting (Solana Specific)
 
-// Redeem
-await client.redeemPosition(market);
-```
+- **Simulation Failed (0x1770)**: Usually means `InvalidLiquidity`. Ensure your liquidity amount is above the minimum (usually 1 USDC or 0.05 SOL).
+- **Insufficient Funds for Rent**: Creating a market accounts for ~0.01-0.02 SOL in rent. Keep at least 0.05 SOL in the wallet.
+- **Blockhash not found**: Transaction took too long to reach the lead. The SDK automatically retries, but a faster RPC helps.
 
-## Collateral Tokens
+## 📚 Resources
 
-Use any SPL token. Common Solana Mainnet tokens:
-
-| Token | Address | Decimals |
-|-------|---------|----------|
-| USDC | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | 6 |
-| USDT | `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` | 6 |
-| SOL (wrapped) | `So11111111111111111111111111111111111111112` | 9 |
-
-Custom tokens add utility—holders can participate in your markets.
-
-## Market Types
-
-### V2 AMM Markets
-Traditional AMM pools with virtual liquidity. Best for liquid markets with many traders.
-
-### P2P Markets
-Peer-to-peer betting where creator picks a side. Best for binary bets between specific parties.
-
-## Why Prediction Markets?
-
-- **Information Discovery**: Market prices reveal collective probability estimates
-- **Token Utility**: Use your token as collateral to drive engagement
-- **Contests**: Run competitions where participants stake on outcomes
-- **Forecasting**: Aggregate crowd wisdom for decision-making
-- **Speed**: Solana's sub-second finality for instant trading
-
-## Troubleshooting
-
-### "Blockhash not found"
-Transaction expired. Retry with fresh blockhash (SDK handles automatically).
-
-### "insufficient funds for rent"
-Need more SOL for rent-exempt accounts. Add ~0.01 SOL to wallet.
-
-### "TokenAccountNotFound"
-Create associated token account first. SDK handles this automatically.
-
-### RPC errors / rate limits
-Use a dedicated RPC provider:
-```bash
-export RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
-```
-
-## Reference Files
-
-- **API Reference**: See [references/api-reference.md](references/api-reference.md) for complete SDK documentation
-- **Use Cases**: See [references/use-cases.md](references/use-cases.md) for detailed use case patterns
-- **Examples**: See [references/examples.md](references/examples.md) for complete code examples
+- **Mainnet Explorer**: [Solscan](https://solscan.io)
+- **SDK Documentation**: [references/api-reference.md](references/api-reference.md)
+- **Advanced Examples**: [references/examples.md](references/examples.md)
