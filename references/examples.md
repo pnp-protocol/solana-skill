@@ -1,138 +1,226 @@
-# PNP Markets - Complete Examples
+# PNP Markets - Complete Examples (Solana)
 
 ## Full Market Lifecycle
 
 ```typescript
-import { PNPClient } from "pnp-evm";
-import { ethers } from "ethers";
+import { PNPClient } from "pnp-sdk";
+import { PublicKey } from "@solana/web3.js";
 
 async function fullLifecycle() {
-  const client = new PNPClient({
-    rpcUrl: process.env.RPC_URL || "https://mainnet.base.org",
-    privateKey: process.env.PRIVATE_KEY!,
-  });
+  const client = new PNPClient(
+    process.env.RPC_URL || "https://api.mainnet-beta.solana.com",
+    process.env.PRIVATE_KEY!
+  );
+
+  const USDC = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
   // 1. CREATE MARKET
   console.log("Creating market...");
-  const { conditionId, hash } = await client.market.createMarket({
+  const { market, signature } = await client.market.createMarket({
     question: "Will our community reach 1000 members this month?",
-    endTime: Math.floor(Date.now() / 1000) + 86400 * 7,
-    initialLiquidity: ethers.parseUnits("50", 6).toString(),
+    endTime: BigInt(Math.floor(Date.now() / 1000) + 86400 * 7),
+    initialLiquidity: 50_000_000n, // 50 USDC
+    baseMint: USDC,
   });
-  console.log("Market created:", conditionId);
+  console.log("Market created:", market.toBase58());
 
   // 2. CHECK PRICES
-  const prices = await client.market.getMarketPrices(conditionId!);
-  console.log("YES:", prices.yesPricePercent);
-  console.log("NO:", prices.noPricePercent);
+  const prices = await client.getMarketPriceV2(market);
+  console.log("YES:", (prices.yesPrice * 100).toFixed(2) + "%");
+  console.log("NO:", (prices.noPrice * 100).toFixed(2) + "%");
 
   // 3. BUY TOKENS
-  const buyAmount = ethers.parseUnits("10", 6);
-  await client.trading.buy(conditionId!, buyAmount, "YES");
+  await client.trading.buyTokensUsdc({
+    market,
+    buyYesToken: true,
+    amountUsdc: 10,
+  });
   console.log("Bought YES tokens");
 
   // 4. SELL TOKENS (partial)
-  const sellAmount = ethers.parseUnits("2", 18);
-  await client.trading.sell(conditionId!, sellAmount, "YES");
+  await client.trading.sellTokensUsdc({
+    market,
+    sellYesToken: true,
+    amountTokens: 2_000_000_000_000_000_000n, // 2 tokens
+  });
   console.log("Sold some YES tokens");
 
-  // 5. SETTLE (after endTime)
-  const winningTokenId = await client.trading.getTokenId(conditionId!, "YES");
-  await client.market.settleMarket(conditionId!, winningTokenId);
+  // 5. SETTLE (after endTime, for custom oracle markets)
+  await client.settleMarket({ market, yesWinner: true });
   console.log("Market settled as YES");
 
   // 6. REDEEM
-  await client.redemption.redeem(conditionId!);
+  await client.redeemPosition(market);
   console.log("Winnings redeemed");
+}
+```
+
+## P2P Market Example
+
+```typescript
+import { PNPClient } from "pnp-sdk";
+import { PublicKey } from "@solana/web3.js";
+
+async function p2pMarketExample() {
+  const client = new PNPClient(
+    process.env.RPC_URL || "https://api.mainnet-beta.solana.com",
+    process.env.PRIVATE_KEY!
+  );
+
+  const USDC = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+
+  // Create P2P market where creator bets YES
+  const { market, signature } = await client.createP2PMarketGeneral({
+    question: "Will our DAO pass Proposal #42?",
+    initialAmount: 100_000_000n, // 100 USDC
+    side: "yes",
+    creatorSideCap: 500_000_000n, // Max 500 USDC on YES side
+    endTime: BigInt(Math.floor(Date.now() / 1000) + 86400 * 14),
+    collateralTokenMint: USDC,
+  });
+
+  console.log("P2P Market:", market.toBase58());
+
+  // Counter-party takes NO side
+  await client.tradeP2PMarket({
+    market,
+    side: "no",
+    amount: 50_000_000n, // 50 USDC
+  });
 }
 ```
 
 ## Custom Token Collateral
 
 ```typescript
-import { PNPClient } from "pnp-evm";
-import { ethers } from "ethers";
+import { PNPClient } from "pnp-sdk";
+import { PublicKey } from "@solana/web3.js";
 
 async function customTokenMarket() {
-  const client = new PNPClient({
-    rpcUrl: process.env.RPC_URL || "https://mainnet.base.org",
-    privateKey: process.env.PRIVATE_KEY!,
-  });
+  const client = new PNPClient(
+    process.env.RPC_URL || "https://api.mainnet-beta.solana.com",
+    process.env.PRIVATE_KEY!
+  );
 
-  const MY_TOKEN = "0xYourTokenAddress";
-  const TOKEN_DECIMALS = 18;
+  const MY_TOKEN = new PublicKey("YourTokenMintAddress");
+  const TOKEN_DECIMALS = 9;
 
-  const { conditionId } = await client.market.createMarket({
+  const { market } = await client.market.createMarket({
     question: "Will our DAO pass Proposal #42?",
-    endTime: Math.floor(Date.now() / 1000) + 86400 * 14,
-    initialLiquidity: ethers.parseUnits("10000", TOKEN_DECIMALS).toString(),
-    collateralToken: MY_TOKEN,
+    endTime: BigInt(Math.floor(Date.now() / 1000) + 86400 * 14),
+    initialLiquidity: BigInt(10000 * Math.pow(10, TOKEN_DECIMALS)),
+    baseMint: MY_TOKEN,
   });
 
-  console.log("Market with custom token:", conditionId);
+  console.log("Market with custom token:", market.toBase58());
 }
 ```
 
 ## Market Monitoring
 
 ```typescript
-import { PNPClient } from "pnp-evm";
+import { PNPClient } from "pnp-sdk";
+import { PublicKey } from "@solana/web3.js";
 
-async function monitorMarket(conditionId: string) {
-  const client = new PNPClient({
-    rpcUrl: process.env.RPC_URL || "https://mainnet.base.org",
-    privateKey: process.env.PRIVATE_KEY!,
-  });
+async function monitorMarket(marketAddress: string) {
+  // Read-only client (no private key needed)
+  const client = new PNPClient(
+    process.env.RPC_URL || "https://api.mainnet-beta.solana.com"
+  );
 
-  const info = await client.market.getMarketInfo(conditionId);
-  const prices = await client.market.getMarketPrices(conditionId);
-  const isSettled = await client.redemption.isResolved(conditionId);
+  const market = new PublicKey(marketAddress);
+  const info = await client.getMarketInfo(market);
+  const prices = await client.getMarketPriceV2(market);
 
   return {
-    question: info.question,
-    endTime: new Date(parseInt(info.endTime) * 1000),
-    yesPrice: prices.yesPricePercent,
-    noPrice: prices.noPricePercent,
-    reserve: info.reserve,
-    isSettled,
+    market: marketAddress,
+    endTime: new Date(Number(info.endTime) * 1000),
+    yesPrice: (prices.yesPrice * 100).toFixed(2) + "%",
+    noPrice: (prices.noPrice * 100).toFixed(2) + "%",
+    isSettled: info.isSettled,
+    winner: info.isSettled ? (info.yesWinner ? "YES" : "NO") : null,
   };
+}
+```
+
+## Trading Bot Pattern
+
+```typescript
+import { PNPClient } from "pnp-sdk";
+import { PublicKey } from "@solana/web3.js";
+
+async function simpleTradingStrategy(marketAddress: string) {
+  const client = new PNPClient(
+    process.env.RPC_URL || "https://api.mainnet-beta.solana.com",
+    process.env.PRIVATE_KEY!
+  );
+
+  const market = new PublicKey(marketAddress);
+  const prices = await client.getMarketPriceV2(market);
+
+  // Simple strategy: buy YES if price < 0.3, buy NO if YES price > 0.7
+  const tradeAmount = 5; // 5 USDC
+
+  if (prices.yesPrice < 0.3) {
+    console.log("YES undervalued, buying...");
+    await client.trading.buyTokensUsdc({
+      market,
+      buyYesToken: true,
+      amountUsdc: tradeAmount,
+    });
+  } else if (prices.yesPrice > 0.7) {
+    console.log("NO undervalued, buying...");
+    await client.trading.buyTokensUsdc({
+      market,
+      buyYesToken: false,
+      amountUsdc: tradeAmount,
+    });
+  } else {
+    console.log("No trade signal");
+  }
 }
 ```
 
 ## Batch Market Creation
 
 ```typescript
-import { PNPClient } from "pnp-evm";
-import { ethers } from "ethers";
+import { PNPClient } from "pnp-sdk";
+import { PublicKey } from "@solana/web3.js";
 
 interface MarketConfig {
   question: string;
   durationHours: number;
-  liquidity: string;
+  liquidity: number;
 }
 
 async function createBatchMarkets(configs: MarketConfig[]) {
-  const client = new PNPClient({
-    rpcUrl: process.env.RPC_URL || "https://mainnet.base.org",
-    privateKey: process.env.PRIVATE_KEY!,
-  });
+  const client = new PNPClient(
+    process.env.RPC_URL || "https://api.mainnet-beta.solana.com",
+    process.env.PRIVATE_KEY!
+  );
 
+  const USDC = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
   const results = [];
 
   for (const config of configs) {
-    const endTime = Math.floor(Date.now() / 1000) + config.durationHours * 3600;
-    const liquidity = ethers.parseUnits(config.liquidity, 6);
+    const endTime = BigInt(Math.floor(Date.now() / 1000) + config.durationHours * 3600);
+    const liquidity = BigInt(config.liquidity * 1_000_000);
 
-    const { conditionId, hash } = await client.market.createMarket({
+    const { market, signature } = await client.market.createMarket({
       question: config.question,
       endTime,
-      initialLiquidity: liquidity.toString(),
+      initialLiquidity: liquidity,
+      baseMint: USDC,
     });
 
-    results.push({ question: config.question, conditionId, hash });
-    
-    // Wait between creations to avoid rate limits
-    await new Promise(r => setTimeout(r, 2000));
+    results.push({
+      question: config.question,
+      market: market.toBase58(),
+      signature,
+    });
+
+    // Brief pause between transactions
+    await new Promise(r => setTimeout(r, 500));
   }
 
   return results;
@@ -140,39 +228,8 @@ async function createBatchMarkets(configs: MarketConfig[]) {
 
 // Usage
 const markets = await createBatchMarkets([
-  { question: "Will BTC hit $100k in 2025?", durationHours: 720, liquidity: "100" },
-  { question: "Will ETH flip BTC by 2026?", durationHours: 8760, liquidity: "100" },
-  { question: "Will Solana TPS exceed 100k?", durationHours: 2160, liquidity: "50" },
+  { question: "Will BTC hit $100k in 2025?", durationHours: 720, liquidity: 100 },
+  { question: "Will ETH flip BTC by 2026?", durationHours: 8760, liquidity: 100 },
+  { question: "Will Solana TPS exceed 100k?", durationHours: 2160, liquidity: 50 },
 ]);
-```
-
-## Trading Bot Pattern
-
-```typescript
-import { PNPClient } from "pnp-evm";
-import { ethers } from "ethers";
-
-async function simpleTradingStrategy(conditionId: string) {
-  const client = new PNPClient({
-    rpcUrl: process.env.RPC_URL || "https://mainnet.base.org",
-    privateKey: process.env.PRIVATE_KEY!,
-  });
-
-  // Get current prices
-  const prices = await client.market.getMarketPrices(conditionId);
-  const yesPrice = parseFloat(prices.yesPrice);
-
-  // Simple strategy: buy YES if price < 0.3, buy NO if price > 0.7
-  const tradeAmount = ethers.parseUnits("5", 6);
-
-  if (yesPrice < 0.3) {
-    console.log("YES undervalued, buying...");
-    await client.trading.buy(conditionId, tradeAmount, "YES");
-  } else if (yesPrice > 0.7) {
-    console.log("NO undervalued, buying...");
-    await client.trading.buy(conditionId, tradeAmount, "NO");
-  } else {
-    console.log("No trade signal");
-  }
-}
 ```

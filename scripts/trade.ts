@@ -1,26 +1,25 @@
 #!/usr/bin/env npx ts-node
 /**
- * Trade on a prediction market (buy/sell YES or NO tokens)
+ * Trade on a prediction market (buy/sell YES or NO tokens) on Solana
  * Run with --help for usage
  */
 
-import { PNPClient } from "pnp-evm";
-import { ethers } from "ethers";
+import { PNPClient } from "pnp-sdk";
+import { PublicKey } from "@solana/web3.js";
 
 interface Args {
-  conditionId: string;
+  market: string;
   action: "buy" | "sell";
   outcome: "YES" | "NO";
   amount: string;
   decimals: number;
-  minOut: string;
   help?: boolean;
   info?: boolean;
 }
 
 function printHelp(): void {
   console.log(`
-PNP Markets - Trade on Market
+PNP Markets (Solana) - Trade on Market
 
 USAGE:
   npx ts-node trade.ts [OPTIONS]
@@ -30,29 +29,28 @@ ACTIONS:
   --sell                    Sell outcome tokens for collateral
 
 REQUIRED:
-  --condition <id>          Market condition ID
+  --market <address>        Market address (base58)
   --outcome <YES|NO>        Outcome to trade
-  --amount <number>         Amount to trade
+  --amount <number>         Amount to trade (in collateral token units)
 
 OPTIONAL:
-  --decimals <number>       Token decimals (default: 6 for buy, 18 for sell)
-  --min-out <number>        Minimum output for slippage protection (default: 0)
+  --decimals <number>       Token decimals (default: 6 for USDC)
   --info                    Show market info only, don't trade
   --help                    Show this help message
 
 ENVIRONMENT:
-  PRIVATE_KEY               Wallet private key (required)
-  RPC_URL                   Base RPC endpoint (optional)
+  PRIVATE_KEY               Solana wallet private key (base58)
+  RPC_URL                   Solana RPC endpoint (optional)
 
 EXAMPLES:
   # Buy YES tokens with 10 USDC
-  npx ts-node trade.ts --buy --condition 0x123... --outcome YES --amount 10
+  npx ts-node trade.ts --buy --market <address> --outcome YES --amount 10
 
   # Sell 5 NO tokens
-  npx ts-node trade.ts --sell --condition 0x123... --outcome NO --amount 5 --decimals 18
+  npx ts-node trade.ts --sell --market <address> --outcome NO --amount 5
 
   # Check market prices
-  npx ts-node trade.ts --info --condition 0x123...
+  npx ts-node trade.ts --info --market <address>
 `);
 }
 
@@ -75,8 +73,8 @@ function parseArgs(): Args {
       case "--sell":
         parsed.action = "sell";
         break;
-      case "--condition":
-        parsed.conditionId = args[++i];
+      case "--market":
+        parsed.market = args[++i];
         break;
       case "--outcome":
         parsed.outcome = args[++i]?.toUpperCase() as "YES" | "NO";
@@ -87,19 +85,15 @@ function parseArgs(): Args {
       case "--decimals":
         parsed.decimals = parseInt(args[++i], 10);
         break;
-      case "--min-out":
-        parsed.minOut = args[++i];
-        break;
     }
   }
 
   return {
-    conditionId: parsed.conditionId || "",
+    market: parsed.market || "",
     action: parsed.action || "buy",
     outcome: parsed.outcome || "YES",
     amount: parsed.amount || "0",
-    decimals: parsed.decimals ?? (parsed.action === "sell" ? 18 : 6),
-    minOut: parsed.minOut || "0",
+    decimals: parsed.decimals ?? 6,
     help: parsed.help,
     info: parsed.info,
   };
@@ -113,90 +107,103 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  if (!args.conditionId) {
-    console.error("Error: --condition is required");
+  if (!args.market) {
+    console.error("Error: --market is required");
     printHelp();
     process.exit(1);
   }
 
-  if (!process.env.PRIVATE_KEY) {
-    console.error("Error: PRIVATE_KEY environment variable is required");
+  // Validate market address
+  let marketPubkey: PublicKey;
+  try {
+    marketPubkey = new PublicKey(args.market);
+  } catch {
+    console.error("Error: Invalid market address");
     process.exit(1);
   }
 
-  const client = new PNPClient({
-    rpcUrl: process.env.RPC_URL || "https://mainnet.base.org",
-    privateKey: process.env.PRIVATE_KEY,
-  });
+  const rpcUrl = process.env.RPC_URL || "https://api.mainnet-beta.solana.com";
+
+  // For info-only, we can use read-only client
+  const client = args.info && !process.env.PRIVATE_KEY
+    ? new PNPClient(rpcUrl)
+    : new PNPClient(rpcUrl, process.env.PRIVATE_KEY);
+
+  if (!args.info && !process.env.PRIVATE_KEY) {
+    console.error("Error: PRIVATE_KEY environment variable is required for trading");
+    process.exit(1);
+  }
 
   // Fetch market info
   console.log("\n📊 Market Info\n");
-  
-  const info = await client.market.getMarketInfo(args.conditionId);
-  const prices = await client.market.getMarketPrices(args.conditionId);
-
-  console.log(`Question:   ${info.question}`);
-  console.log(`End Time:   ${new Date(parseInt(info.endTime) * 1000).toISOString()}`);
-  console.log(`Settled:    ${info.isSettled}`);
-  console.log(`YES Price:  ${prices.yesPricePercent}`);
-  console.log(`NO Price:   ${prices.noPricePercent}`);
-
-  if (args.info) {
-    console.log("\n--- JSON OUTPUT ---");
-    console.log(JSON.stringify({ ...info, prices }, null, 2));
-    process.exit(0);
-  }
-
-  // Validate trade params
-  if (!args.amount || parseFloat(args.amount) <= 0) {
-    console.error("\nError: --amount must be a positive number");
-    process.exit(1);
-  }
-
-  if (args.outcome !== "YES" && args.outcome !== "NO") {
-    console.error("\nError: --outcome must be YES or NO");
-    process.exit(1);
-  }
-
-  // Check if tradeable
-  const now = Math.floor(Date.now() / 1000);
-  if (now >= parseInt(info.endTime)) {
-    console.error("\n❌ Market trading period has ended");
-    process.exit(1);
-  }
-  if (info.isSettled) {
-    console.error("\n❌ Market is already settled");
-    process.exit(1);
-  }
-
-  const amount = ethers.parseUnits(args.amount, args.decimals);
-  const minOut = ethers.parseUnits(args.minOut, args.action === "buy" ? 18 : args.decimals);
-
-  console.log(`\n💱 Executing ${args.action.toUpperCase()}\n`);
-  console.log(`Action:     ${args.action.toUpperCase()} ${args.outcome}`);
-  console.log(`Amount:     ${args.amount}`);
-  console.log(`Wallet:     ${client.client.signer?.address}`);
 
   try {
-    let result;
-    if (args.action === "buy") {
-      result = await client.trading.buy(args.conditionId, amount, args.outcome, minOut);
-    } else {
-      result = await client.trading.sell(args.conditionId, amount, args.outcome, minOut);
+    const prices = await client.getMarketPriceV2(marketPubkey);
+
+    console.log(`Market:     ${args.market}`);
+    console.log(`YES Price:  ${(Number(prices.yesPrice) * 100).toFixed(2)}%`);
+    console.log(`NO Price:   ${(Number(prices.noPrice) * 100).toFixed(2)}%`);
+
+    if (args.info) {
+      console.log("\n--- JSON OUTPUT ---");
+      console.log(JSON.stringify({
+        market: args.market,
+        yesPrice: prices.yesPrice,
+        noPrice: prices.noPrice,
+        yesPricePercent: `${(Number(prices.yesPrice) * 100).toFixed(2)}%`,
+        noPricePercent: `${(Number(prices.noPrice) * 100).toFixed(2)}%`,
+      }, null, 2));
+      process.exit(0);
     }
 
-    console.log("\n✅ Trade Executed!\n");
-    console.log(`Tx Hash: ${result.hash}`);
-    console.log(`\nBaseScan: https://basescan.org/tx/${result.hash}`);
+    // Validate trade params
+    if (!args.amount || parseFloat(args.amount) <= 0) {
+      console.error("\nError: --amount must be a positive number");
+      process.exit(1);
+    }
+
+    if (args.outcome !== "YES" && args.outcome !== "NO") {
+      console.error("\nError: --outcome must be YES or NO");
+      process.exit(1);
+    }
+
+    console.log(`\n💱 Executing ${args.action.toUpperCase()}\n`);
+    console.log(`Action:     ${args.action.toUpperCase()} ${args.outcome}`);
+    console.log(`Amount:     ${args.amount}`);
+    console.log("");
+
+    let signature: string | undefined;
+
+    if (args.action === "buy") {
+      const result = await client.trading!.buyTokensUsdc({
+        market: marketPubkey,
+        buyYesToken: args.outcome === "YES",
+        amountUsdc: parseFloat(args.amount),
+      });
+      signature = result.signature;
+    } else {
+      // For selling, use burnDecisionTokensDerived
+      const amountRaw = BigInt(Math.floor(parseFloat(args.amount) * Math.pow(10, 18))); // Tokens have 18 decimals
+      const result = await client.trading!.burnDecisionTokensDerived({
+        market: marketPubkey,
+        amount: amountRaw,
+        burnYesToken: args.outcome === "YES",
+      });
+      signature = result.signature;
+    }
+
+    console.log("✅ Trade Executed!\n");
+    console.log(`Signature: ${signature}`);
+    console.log(`\nSolscan:   https://solscan.io/tx/${signature}`);
 
     // Show updated prices
-    const newPrices = await client.market.getMarketPrices(args.conditionId);
+    const newPrices = await client.getMarketPriceV2(marketPubkey);
     console.log(`\nUpdated Prices:`);
-    console.log(`  YES: ${newPrices.yesPricePercent}`);
-    console.log(`  NO:  ${newPrices.noPricePercent}`);
+    console.log(`  YES: ${(Number(newPrices.yesPrice) * 100).toFixed(2)}%`);
+    console.log(`  NO:  ${(Number(newPrices.noPrice) * 100).toFixed(2)}%`);
 
   } catch (error: any) {
-    console.error("\n❌ Trade failed:", error.message);
+    console.error("\n❌ Failed:", error.message);
     process.exit(1);
   }
 }

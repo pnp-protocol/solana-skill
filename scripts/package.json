@@ -1,8 +1,8 @@
 {
-  "name": "pnp-markets-scripts",
+  "name": "pnp-markets-solana-scripts",
   "version": "1.0.0",
   "type": "module",
-  "description": "CLI scripts for PNP Prediction Markets",
+  "description": "CLI scripts for PNP Prediction Markets on Solana",
   "scripts": {
     "create": "npx ts-node create-market.ts",
     "trade": "npx ts-node trade.ts",
@@ -10,8 +10,9 @@
     "redeem": "npx ts-node redeem.ts"
   },
   "dependencies": {
-    "pnp-evm": "^0.1.2",
-    "ethers": "^6.0.0"
+    "pnp-sdk": "latest",
+    "@solana/web3.js": "^1.95.0",
+    "bs58": "^5.0.0"
   },
   "devDependencies": {
     "ts-node": "^10.9.0",

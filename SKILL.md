@@ -1,11 +1,11 @@
 ---
-name: pnp-markets
-description: Create, trade, and settle prediction markets on Base with any ERC20 collateral. Use when building prediction market infrastructure, running contests, crowdsourcing probability estimates, adding utility to tokens, or tapping into true information finance via market-based forecasting.
+name: pnp-markets-solana
+description: Create, trade, and settle permissionless prediction markets on Solana with any SPL token collateral. Use when building prediction market infrastructure, running contests, crowdsourcing probability estimates, adding utility to tokens, or tapping into true information finance via market-based forecasting.
 ---
 
-# PNP Markets
+# PNP Markets (Solana)
 
-Create and manage prediction markets on Base Mainnet with any ERC20 collateral token.
+Create and manage prediction markets on Solana Mainnet with any SPL token collateral.
 
 ## Quick Decision
 
@@ -20,11 +20,11 @@ Need prediction markets?
 ## Environment
 
 ```bash
-export PRIVATE_KEY=<wallet_private_key>    # Required
-export RPC_URL=<base_rpc_endpoint>         # Optional (defaults to public RPC)
+export PRIVATE_KEY=<solana_wallet_private_key>  # Required (base58)
+export RPC_URL=<solana_rpc_endpoint>            # Optional (defaults to mainnet)
 ```
 
-For production, use a dedicated RPC (Alchemy, QuickNode) to avoid rate limits.
+For production, use a dedicated RPC (Helius, QuickNode, Alchemy) to avoid rate limits.
 
 ## Scripts
 
@@ -33,118 +33,107 @@ Run any script with `--help` first to see all options.
 ### Create Market
 
 ```bash
+# V2 AMM Market (default)
 npx ts-node scripts/create-market.ts \
   --question "Will ETH reach $10k by Dec 2025?" \
   --duration 168 \
   --liquidity 100
+
+# P2P Market
+npx ts-node scripts/create-market.ts \
+  --question "Will proposal pass?" \
+  --duration 168 \
+  --liquidity 100 \
+  --type p2p \
+  --side yes
 ```
 
-Options: `--collateral <USDC|WETH|address>`, `--decimals <n>`
+Options: `--collateral <USDC|USDT|SOL|mint>`, `--decimals <n>`, `--type <v2|p2p>`, `--side <yes|no>`
 
 ### Trade
 
 ```bash
 # Buy YES tokens
-npx ts-node scripts/trade.ts --buy --condition 0x... --outcome YES --amount 10
+npx ts-node scripts/trade.ts --buy --market <address> --outcome YES --amount 10
 
 # Sell NO tokens  
-npx ts-node scripts/trade.ts --sell --condition 0x... --outcome NO --amount 5 --decimals 18
+npx ts-node scripts/trade.ts --sell --market <address> --outcome NO --amount 5
 
 # View prices only
-npx ts-node scripts/trade.ts --info --condition 0x...
+npx ts-node scripts/trade.ts --info --market <address>
 ```
 
 ### Settle
 
 ```bash
 # Settle as YES winner
-npx ts-node scripts/settle.ts --condition 0x... --outcome YES
+npx ts-node scripts/settle.ts --market <address> --outcome YES
 
 # Check status
-npx ts-node scripts/settle.ts --status --condition 0x...
+npx ts-node scripts/settle.ts --status --market <address>
 ```
 
 ### Redeem
 
 ```bash
-npx ts-node scripts/redeem.ts --condition 0x...
+npx ts-node scripts/redeem.ts --market <address>
 ```
 
 ## Programmatic Usage
 
 ```typescript
-import { PNPClient } from "pnp-evm";
-import { ethers } from "ethers";
+import { PNPClient } from "pnp-sdk";
+import { PublicKey } from "@solana/web3.js";
 
-const client = new PNPClient({
-  rpcUrl: process.env.RPC_URL || "https://mainnet.base.org",
-  privateKey: process.env.PRIVATE_KEY!,
-});
+const client = new PNPClient(
+  process.env.RPC_URL || "https://api.mainnet-beta.solana.com",
+  process.env.PRIVATE_KEY!
+);
 
-// Create market
-const { conditionId } = await client.market.createMarket({
+// Create V2 AMM market
+const { market, signature } = await client.market.createMarket({
   question: "Will X happen?",
-  endTime: Math.floor(Date.now() / 1000) + 86400 * 7,
-  initialLiquidity: ethers.parseUnits("100", 6).toString(),
+  endTime: BigInt(Math.floor(Date.now() / 1000) + 86400 * 7),
+  initialLiquidity: 100_000_000n, // 100 USDC
+  baseMint: new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
 });
 
 // Trade
-await client.trading.buy(conditionId, ethers.parseUnits("10", 6), "YES");
+await client.trading.buyTokensUsdc({
+  market,
+  buyYesToken: true,
+  amountUsdc: 10,
+});
 
-// Settle (after endTime)
-const tokenId = await client.trading.getTokenId(conditionId, "YES");
-await client.market.settleMarket(conditionId, tokenId);
+// Get prices
+const prices = await client.getMarketPriceV2(market);
+
+// Settle (for custom oracle markets)
+await client.settleMarket({ market, yesWinner: true });
 
 // Redeem
-await client.redemption.redeem(conditionId);
+await client.redeemPosition(market);
 ```
 
 ## Collateral Tokens
 
-Use any ERC20. Common Base Mainnet tokens:
+Use any SPL token. Common Solana Mainnet tokens:
 
 | Token | Address | Decimals |
 |-------|---------|----------|
-| USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | 6 |
-| WETH | `0x4200000000000000000000000000000000000006` | 18 |
-| cbETH | `0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22` | 18 |
+| USDC | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | 6 |
+| USDT | `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` | 6 |
+| SOL (wrapped) | `So11111111111111111111111111111111111111112` | 9 |
 
 Custom tokens add utility—holders can participate in your markets.
 
-## ERC20 Approvals
+## Market Types
 
-Before interacting with PNP contracts, you must approve them to spend your collateral tokens. This is standard for all EVM dApps.
+### V2 AMM Markets
+Traditional AMM pools with virtual liquidity. Best for liquid markets with many traders.
 
-### How It Works
-
-1. **First interaction requires approval**: When you create a market or trade for the first time with a token, an approval transaction is sent
-2. **Infinite approvals**: The SDK uses `type(uint256).max` approvals (standard EVM pattern) so you only approve once per token
-3. **Subsequent interactions**: No approval needed—transactions execute directly
-
-### Timing Considerations
-
-The approval transaction must be confirmed on-chain before the main transaction executes. If you see:
-
-```
-ERC20: transfer amount exceeds allowance
-```
-
-This means the approval hasn't been mined yet. **Simply wait a few seconds and retry**—the approval will be confirmed and subsequent attempts will succeed.
-
-### Why Infinite Approvals?
-
-- **Gas efficiency**: Approve once, trade forever without extra transactions
-- **Better UX**: No repeated approval popups
-- **Industry standard**: Used by Uniswap, Aave, and most major DeFi protocols
-
-For maximum security-conscious users, you can manually set specific approval amounts, but this requires an approval transaction before each interaction.
-
-## Contracts
-
-| Contract | Address |
-|----------|---------|
-| PNP Factory | `0x5E5abF8a083a8E0c2fBf5193E711A61B1797e15A` |
-| Fee Manager | `0x6f1BffB36aC53671C9a409A0118cA6fee2b2b462` |
+### P2P Markets
+Peer-to-peer betting where creator picks a side. Best for binary bets between specific parties.
 
 ## Why Prediction Markets?
 
@@ -152,25 +141,24 @@ For maximum security-conscious users, you can manually set specific approval amo
 - **Token Utility**: Use your token as collateral to drive engagement
 - **Contests**: Run competitions where participants stake on outcomes
 - **Forecasting**: Aggregate crowd wisdom for decision-making
-
-The pAMM virtual liquidity model ensures smooth trading even with minimal initial liquidity.
+- **Speed**: Solana's sub-second finality for instant trading
 
 ## Troubleshooting
 
-### "ERC20: transfer amount exceeds allowance"
-The approval transaction hasn't been confirmed yet. Wait 5-10 seconds and retry.
+### "Blockhash not found"
+Transaction expired. Retry with fresh blockhash (SDK handles automatically).
 
-### "Market doesn't exist"
-The market creation transaction may have failed or is still pending. Verify on BaseScan that your transaction was confirmed successfully.
+### "insufficient funds for rent"
+Need more SOL for rent-exempt accounts. Add ~0.01 SOL to wallet.
 
-### "over rate limit" / RPC errors
-The public Base RPC has rate limits. Use a dedicated RPC provider:
+### "TokenAccountNotFound"
+Create associated token account first. SDK handles this automatically.
+
+### RPC errors / rate limits
+Use a dedicated RPC provider:
 ```bash
-export RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_KEY
+export RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
 ```
-
-### Transaction stuck or slow
-Base Mainnet can occasionally have congestion. Check gas prices and consider increasing if needed.
 
 ## Reference Files
 

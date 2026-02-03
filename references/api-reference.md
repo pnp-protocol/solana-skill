@@ -1,11 +1,11 @@
-# PNP SDK API Reference
+# PNP SDK API Reference (Solana)
 
-Complete API documentation for the PNP Protocol SDK.
+Complete API documentation for the PNP Protocol SDK on Solana.
 
 ## Installation
 
 ```bash
-npm install pnp-evm ethers
+npm install pnp-sdk @solana/web3.js
 ```
 
 ## PNPClient
@@ -13,171 +13,164 @@ npm install pnp-evm ethers
 Main entry point for all operations.
 
 ```typescript
-import { PNPClient } from "pnp-evm";
+import { PNPClient } from "pnp-sdk";
 
-const client = new PNPClient({
-  rpcUrl: string,           // RPC endpoint (defaults to Base mainnet)
-  privateKey: string,       // Wallet private key
-  contractAddresses?: {     // Optional custom addresses
-    marketFactory: string,
-    usdcToken: string,
-    feeManager: string,
-  }
-});
+// Read-only client
+const readOnlyClient = new PNPClient("https://api.mainnet-beta.solana.com");
+
+// Client with signing capabilities
+const client = new PNPClient(
+  "https://api.mainnet-beta.solana.com",
+  process.env.PRIVATE_KEY  // base58 encoded private key
+);
 ```
 
-## Market Module (`client.market`)
+## Market Creation
 
-### createMarket(params)
+### createMarket (V2 AMM)
 
-Create a new prediction market.
+Create a new V2 AMM prediction market.
 
 ```typescript
-const { conditionId, hash, receipt } = await client.market.createMarket({
-  question: string,           // Prediction question
-  endTime: number,            // Unix timestamp when trading ends
-  initialLiquidity: string,   // Amount in wei
-  collateralToken?: string,   // ERC20 address (defaults to USDC)
+import { PublicKey } from "@solana/web3.js";
+
+const { market, signature } = await client.market.createMarket({
+  question: "Will X happen?",
+  endTime: BigInt(Math.floor(Date.now() / 1000) + 86400 * 7),
+  initialLiquidity: 100_000_000n, // 100 USDC (6 decimals)
+  baseMint: new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
 });
 ```
 
 **Returns:**
-- `conditionId`: Unique market identifier
-- `hash`: Transaction hash
-- `receipt`: Full transaction receipt
+- `market`: Market PublicKey
+- `signature`: Transaction signature
 
-### getMarketInfo(conditionId)
+### createP2PMarketGeneral
+
+Create a P2P (peer-to-peer) prediction market.
+
+```typescript
+const { market, signature } = await client.createP2PMarketGeneral({
+  question: "Will X happen?",
+  initialAmount: 1_000_000n,
+  side: "yes", // or "no"
+  creatorSideCap: 5_000_000n,
+  endTime: BigInt(Math.floor(Date.now() / 1000) + 86400 * 7),
+  collateralTokenMint: new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
+});
+```
+
+## Market Info
+
+### getMarketInfo
 
 Get market details.
 
 ```typescript
-const info = await client.market.getMarketInfo(conditionId);
+const info = await client.getMarketInfo(marketPubkey);
 // Returns:
 // {
-//   question: string,
-//   endTime: string,
-//   isCreated: boolean,
+//   endTime: bigint,
 //   isSettled: boolean,
-//   reserve: string,
-//   collateral: string,
-//   winningToken: string
+//   yesWinner: boolean,
+//   collateralMint: PublicKey,
+//   ...
 // }
 ```
 
-### getMarketPrices(conditionId)
+### getMarketPriceV2
 
 Get current YES/NO token prices.
 
 ```typescript
-const prices = await client.market.getMarketPrices(conditionId);
+const prices = await client.getMarketPriceV2(marketPubkey);
 // Returns:
 // {
-//   yesPrice: string,        // e.g., "0.65"
-//   noPrice: string,         // e.g., "0.35"
-//   yesPricePercent: string, // e.g., "65.00%"
-//   noPricePercent: string,  // e.g., "35.00%"
-//   yesPriceRaw: string,
-//   noPriceRaw: string
+//   yesPrice: number,  // e.g., 0.65
+//   noPrice: number,   // e.g., 0.35
 // }
 ```
 
-### settleMarket(conditionId, winningTokenId)
+## Trading Module
 
-Settle a market with the winning outcome. Only callable by market creator after end time.
+### buyTokensUsdc
 
-```typescript
-const winningTokenId = await client.trading.getTokenId(conditionId, "YES");
-const result = await client.market.settleMarket(conditionId, winningTokenId);
-```
-
-## Trading Module (`client.trading`)
-
-### getTokenId(conditionId, outcome)
-
-Get the token ID for a specific outcome.
+Buy outcome tokens with USDC collateral.
 
 ```typescript
-const yesTokenId = await client.trading.getTokenId(conditionId, "YES");
-const noTokenId = await client.trading.getTokenId(conditionId, "NO");
+const { signature } = await client.trading.buyTokensUsdc({
+  market: marketPubkey,
+  buyYesToken: true,  // or false for NO
+  amountUsdc: 10,     // 10 USDC
+});
 ```
 
-### buy(conditionId, amount, outcome, minTokensOut?)
+### sellTokensUsdc
 
-Buy outcome tokens with collateral.
+Sell outcome tokens for USDC collateral.
 
 ```typescript
-import { ethers } from "ethers";
-
-const amount = ethers.parseUnits("10", 6); // 10 USDC
-const minTokensOut = 0n; // Slippage protection (0 = no limit)
-
-const result = await client.trading.buy(
-  conditionId,
-  amount,
-  "YES",        // or "NO"
-  minTokensOut
-);
+const { signature } = await client.trading.sellTokensUsdc({
+  market: marketPubkey,
+  sellYesToken: true,
+  amountTokens: 10_000_000_000_000_000_000n, // 10 tokens (18 decimals)
+});
 ```
 
-**Parameters:**
-- `conditionId`: Market identifier
-- `amount`: Collateral amount in wei
-- `outcome`: "YES" or "NO"
-- `minTokensOut`: Minimum tokens to receive (slippage protection)
+### tradeP2PMarket
 
-### sell(conditionId, amount, outcome, minCollateralOut?)
-
-Sell outcome tokens for collateral.
+Trade on P2P markets.
 
 ```typescript
-const tokenAmount = ethers.parseUnits("5", 18); // 5 outcome tokens
-const minCollateralOut = 0n;
-
-const result = await client.trading.sell(
-  conditionId,
-  tokenAmount,
-  "YES",
-  minCollateralOut
-);
+const { signature } = await client.tradeP2PMarket({
+  market: marketPubkey,
+  side: "yes",
+  amount: 10_000_000n,
+});
 ```
 
-**Note:** Outcome tokens always have 18 decimals.
+## Settlement
 
-## Redemption Module (`client.redemption`)
+### settleMarket
 
-### isResolved(conditionId)
-
-Check if market is settled.
+Settle a market with the winning outcome (for custom oracle markets).
 
 ```typescript
-const isSettled = await client.redemption.isResolved(conditionId);
+const { signature } = await client.settleMarket({
+  market: marketPubkey,
+  yesWinner: true,
+});
 ```
 
-### getWinningToken(conditionId)
+### setMarketResolvable
 
-Get the winning token ID after settlement.
+Enable resolution for custom oracle markets (15-minute buffer required).
 
 ```typescript
-const winningTokenId = await client.redemption.getWinningToken(conditionId);
+const { signature } = await client.setMarketResolvable({
+  market: marketPubkey,
+  resolvable: true,
+});
 ```
 
-### redeem(conditionId)
+## Redemption
+
+### redeemPosition
 
 Redeem winning tokens for collateral.
 
 ```typescript
-const result = await client.redemption.redeem(conditionId);
+const { signature } = await client.redeemPosition(marketPubkey);
 ```
 
-## Contract Addresses (Base Mainnet)
+## Token Addresses (Solana Mainnet)
 
-| Contract | Address |
-|----------|---------|
-| PNP Factory | `0x5E5abF8a083a8E0c2fBf5193E711A61B1797e15A` |
-| Fee Manager | `0x6f1BffB36aC53671C9a409A0118cA6fee2b2b462` |
-| USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
-| WETH | `0x4200000000000000000000000000000000000006` |
-| cbETH | `0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22` |
+| Token | Address | Decimals |
+|-------|---------|----------|
+| USDC | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | 6 |
+| USDT | `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` | 6 |
+| SOL (wrapped) | `So11111111111111111111111111111111111111112` | 9 |
 
 ## Error Handling
 
@@ -186,15 +179,26 @@ try {
   await client.market.createMarket({ ... });
 } catch (error: any) {
   if (error.message.includes("insufficient funds")) {
-    // Not enough collateral balance
-  } else if (error.message.includes("Slippage")) {
-    // Price moved too much
-  } else if (error.message.includes("Only creator")) {
-    // Not authorized to settle
+    // Not enough SOL or collateral
+  } else if (error.message.includes("Blockhash")) {
+    // Transaction expired, retry
+  } else if (error.message.includes("TokenAccountNotFound")) {
+    // Need to create ATA first
   }
 }
 ```
 
-## Rate Limiting
+## RPC Providers
 
-The SDK includes built-in retry logic for RPC rate limits. For production use, use a dedicated RPC provider (Alchemy, QuickNode, Infura) instead of the public endpoint.
+For production, use dedicated RPC:
+
+```bash
+# Helius
+export RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+
+# QuickNode
+export RPC_URL=https://your-endpoint.solana-mainnet.quiknode.pro/YOUR_KEY
+
+# Alchemy
+export RPC_URL=https://solana-mainnet.g.alchemy.com/v2/YOUR_KEY
+```

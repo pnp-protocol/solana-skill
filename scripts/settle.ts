@@ -1,13 +1,14 @@
 #!/usr/bin/env npx ts-node
 /**
- * Settle a prediction market with the winning outcome
+ * Settle a prediction market with the winning outcome on Solana
  * Run with --help for usage
  */
 
-import { PNPClient } from "pnp-evm";
+import { PNPClient } from "pnp-sdk";
+import { PublicKey } from "@solana/web3.js";
 
 interface Args {
-  conditionId: string;
+  market: string;
   outcome: "YES" | "NO";
   help?: boolean;
   status?: boolean;
@@ -15,13 +16,13 @@ interface Args {
 
 function printHelp(): void {
   console.log(`
-PNP Markets - Settle Market
+PNP Markets (Solana) - Settle Market
 
 USAGE:
   npx ts-node settle.ts [OPTIONS]
 
 REQUIRED:
-  --condition <id>          Market condition ID
+  --market <address>        Market address (base58)
   --outcome <YES|NO>        Winning outcome
 
 OPTIONAL:
@@ -29,19 +30,20 @@ OPTIONAL:
   --help                    Show this help message
 
 ENVIRONMENT:
-  PRIVATE_KEY               Wallet private key (required, must be market creator)
-  RPC_URL                   Base RPC endpoint (optional)
+  PRIVATE_KEY               Solana wallet private key (required, must be oracle)
+  RPC_URL                   Solana RPC endpoint (optional)
 
 NOTE:
-  Only the market creator can settle the market.
+  Only the market oracle can settle the market.
+  For custom oracle markets, the oracle must first call setMarketResolvable.
   Market can only be settled after the trading period ends.
 
 EXAMPLES:
   # Settle market as YES
-  npx ts-node settle.ts --condition 0x123... --outcome YES
+  npx ts-node settle.ts --market <address> --outcome YES
 
   # Check if market is settled
-  npx ts-node settle.ts --status --condition 0x123...
+  npx ts-node settle.ts --status --market <address>
 `);
 }
 
@@ -58,8 +60,8 @@ function parseArgs(): Args {
       case "--status":
         parsed.status = true;
         break;
-      case "--condition":
-        parsed.conditionId = args[++i];
+      case "--market":
+        parsed.market = args[++i];
         break;
       case "--outcome":
         parsed.outcome = args[++i]?.toUpperCase() as "YES" | "NO";
@@ -68,7 +70,7 @@ function parseArgs(): Args {
   }
 
   return {
-    conditionId: parsed.conditionId || "",
+    market: parsed.market || "",
     outcome: parsed.outcome || "YES",
     help: parsed.help,
     status: parsed.status,
@@ -83,94 +85,107 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  if (!args.conditionId) {
-    console.error("Error: --condition is required");
+  if (!args.market) {
+    console.error("Error: --market is required");
     printHelp();
     process.exit(1);
   }
 
-  if (!process.env.PRIVATE_KEY) {
-    console.error("Error: PRIVATE_KEY environment variable is required");
+  // Validate market address
+  let marketPubkey: PublicKey;
+  try {
+    marketPubkey = new PublicKey(args.market);
+  } catch {
+    console.error("Error: Invalid market address");
     process.exit(1);
   }
 
-  const client = new PNPClient({
-    rpcUrl: process.env.RPC_URL || "https://mainnet.base.org",
-    privateKey: process.env.PRIVATE_KEY,
-  });
+  const rpcUrl = process.env.RPC_URL || "https://api.mainnet-beta.solana.com";
 
-  // Fetch market info
-  console.log("\n📊 Market Status\n");
+  // For status check, we can use read-only client
+  const client = args.status && !process.env.PRIVATE_KEY
+    ? new PNPClient(rpcUrl)
+    : new PNPClient(rpcUrl, process.env.PRIVATE_KEY);
 
-  const info = await client.market.getMarketInfo(args.conditionId);
-  const isSettled = await client.redemption.isResolved(args.conditionId);
-
-  console.log(`Question:   ${info.question}`);
-  console.log(`End Time:   ${new Date(parseInt(info.endTime) * 1000).toISOString()}`);
-  console.log(`Settled:    ${isSettled}`);
-
-  if (isSettled) {
-    const winningToken = await client.redemption.getWinningToken(args.conditionId);
-    const yesTokenId = await client.trading.getTokenId(args.conditionId, "YES");
-    const outcome = winningToken === yesTokenId.toString() ? "YES" : "NO";
-    console.log(`Winner:     ${outcome}`);
-
-    if (args.status) {
-      console.log("\n--- JSON OUTPUT ---");
-      console.log(JSON.stringify({ settled: true, winner: outcome }, null, 2));
-    }
-    process.exit(0);
+  if (!args.status && !process.env.PRIVATE_KEY) {
+    console.error("Error: PRIVATE_KEY environment variable is required for settlement");
+    process.exit(1);
   }
 
-  if (args.status) {
+  // Fetch market info using trading module's getMarketInfo
+  console.log("\n📊 Market Status\n");
+
+  try {
+    const marketInfo = await client.trading!.getMarketInfo(marketPubkey);
+
+    console.log(`Market:     ${args.market}`);
+    console.log(`End Time:   ${new Date(Number(marketInfo.endTime) * 1000).toISOString()}`);
+    console.log(`Settled:    ${marketInfo.resolved}`);
+
+    if (marketInfo.resolved) {
+      // winningTokenId: 0 = none, 1 = yes, 2 = no
+      const winner = marketInfo.winningTokenId === 1 ? "YES" : (marketInfo.winningTokenId === 2 ? "NO" : "NONE");
+      console.log(`Winner:     ${winner}`);
+
+      if (args.status) {
+        console.log("\n--- JSON OUTPUT ---");
+        console.log(JSON.stringify({ settled: true, winner }, null, 2));
+      }
+      process.exit(0);
+    }
+
+    if (args.status) {
+      const now = Math.floor(Date.now() / 1000);
+      const endTime = Number(marketInfo.endTime);
+      const canSettle = now >= endTime && marketInfo.resolvable;
+
+      console.log(`Resolvable: ${marketInfo.resolvable}`);
+      console.log(`\nCan Settle: ${canSettle}`);
+      if (now < endTime) {
+        const remaining = endTime - now;
+        const hours = Math.floor(remaining / 3600);
+        const mins = Math.floor((remaining % 3600) / 60);
+        console.log(`Time Left:  ${hours}h ${mins}m`);
+      }
+
+      console.log("\n--- JSON OUTPUT ---");
+      console.log(JSON.stringify({ settled: false, canSettle, resolvable: marketInfo.resolvable, endTime }, null, 2));
+      process.exit(0);
+    }
+
+    // Validate settlement params
+    if (args.outcome !== "YES" && args.outcome !== "NO") {
+      console.error("\nError: --outcome must be YES or NO");
+      process.exit(1);
+    }
+
     const now = Math.floor(Date.now() / 1000);
-    const endTime = parseInt(info.endTime);
-    const canSettle = now >= endTime;
-    
-    console.log(`\nCan Settle: ${canSettle}`);
-    if (!canSettle) {
+    const endTime = Number(marketInfo.endTime);
+    if (now < endTime) {
       const remaining = endTime - now;
       const hours = Math.floor(remaining / 3600);
       const mins = Math.floor((remaining % 3600) / 60);
-      console.log(`Time Left:  ${hours}h ${mins}m`);
+      console.error(`\n❌ Cannot settle yet. Trading ends in ${hours}h ${mins}m`);
+      process.exit(1);
     }
 
-    console.log("\n--- JSON OUTPUT ---");
-    console.log(JSON.stringify({ settled: false, canSettle, endTime }, null, 2));
-    process.exit(0);
-  }
+    // Execute settlement
+    console.log(`\n⚖️ Settling Market\n`);
+    console.log(`Outcome:    ${args.outcome}`);
+    console.log("");
 
-  // Validate settlement
-  if (args.outcome !== "YES" && args.outcome !== "NO") {
-    console.error("\nError: --outcome must be YES or NO");
-    process.exit(1);
-  }
+    const result = await client.settleMarket({
+      market: marketPubkey,
+      yesWinner: args.outcome === "YES",
+    });
 
-  const now = Math.floor(Date.now() / 1000);
-  if (now < parseInt(info.endTime)) {
-    const remaining = parseInt(info.endTime) - now;
-    const hours = Math.floor(remaining / 3600);
-    const mins = Math.floor((remaining % 3600) / 60);
-    console.error(`\n❌ Cannot settle yet. Trading ends in ${hours}h ${mins}m`);
-    process.exit(1);
-  }
-
-  // Execute settlement
-  console.log(`\n⚖️ Settling Market\n`);
-  console.log(`Outcome:    ${args.outcome}`);
-  console.log(`Wallet:     ${client.client.signer?.address}`);
-
-  try {
-    const winningTokenId = await client.trading.getTokenId(args.conditionId, args.outcome);
-    const result = await client.market.settleMarket(args.conditionId, winningTokenId);
-
-    console.log("\n✅ Market Settled!\n");
-    console.log(`Winner:   ${args.outcome}`);
-    console.log(`Tx Hash:  ${result.hash}`);
-    console.log(`\nBaseScan: https://basescan.org/tx/${result.hash}`);
+    console.log("✅ Market Settled!\n");
+    console.log(`Winner:    ${args.outcome}`);
+    console.log(`Signature: ${result.signature}`);
+    console.log(`\nSolscan:   https://solscan.io/tx/${result.signature}`);
 
     console.log("\n--- JSON OUTPUT ---");
-    console.log(JSON.stringify({ settled: true, winner: args.outcome, hash: result.hash }, null, 2));
+    console.log(JSON.stringify({ settled: true, winner: args.outcome, signature: result.signature }, null, 2));
 
   } catch (error: any) {
     console.error("\n❌ Settlement failed:", error.message);
