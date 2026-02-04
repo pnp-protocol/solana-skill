@@ -27,8 +27,14 @@ Use this skill when the user wants to:
 Before running any scripts, ensure you have:
 
 1. **Solana Wallet**: Base58-encoded private key with SOL for fees (~0.05 SOL minimum)
-2. **Collateral Tokens**: USDC, USDT, SOL, or custom SPL token for market liquidity
+2. **USDC Tokens**: Mainnet USDC (`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`) for market liquidity
 3. **RPC Endpoint**: Mainnet RPC URL (public or dedicated like Helius/QuickNode)
+
+> [!CAUTION]
+> **MAINNET ONLY**: All scripts are configured for Solana Mainnet. Never use devnet. RPC defaults to `https://api.mainnet-beta.solana.com`.
+
+> [!IMPORTANT]
+> **ALWAYS USE USDC**: All markets must be created with USDC as collateral. Mint: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` (6 decimals).
 
 ```bash
 # Install dependencies
@@ -47,6 +53,47 @@ Solana prediction markets support two primary architectures:
 
 1. **V2 AMM Markets (Default)**: Use Automated Market Makers with virtual liquidity. Best for publicly traded markets.
 2. **P2P Markets**: Direct peer-to-peer betting where the creator takes one side. Best for private or specific bets.
+
+### Standard V2 AMM Market Creation
+
+**Function**: `client.market.createMarket(params)`
+
+Creates a standard prediction market using PNP's global oracle for resolution.
+
+```typescript
+import 'dotenv/config';
+import { PublicKey } from '@solana/web3.js';
+import { PNPClient } from 'pnp-sdk';
+
+const RPC_URL = process.env.RPC_URL || 'https://api.mainnet-beta.solana.com';
+const PRIVATE_KEY = process.env.PRIVATE_KEY || '';
+
+async function main() {
+  const secretKey = PNPClient.parseSecretKey(PRIVATE_KEY);
+  const client = new PNPClient(RPC_URL, secretKey);
+
+  const result = await client.market.createMarket({
+    question: 'Will Bitcoin reach $100K by end of 2025?',
+    initialLiquidity: 1_000_000n,  // 1 USDC (6 decimals)
+    endTime: BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60),
+    baseMint: new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'),
+  });
+
+  console.log('Market Address:', result.market.toBase58());
+}
+
+main().catch(console.error);
+```
+
+**Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `question` | `string` | ✅ | The prediction question |
+| `initialLiquidity` | `bigint` | ✅ | Initial liquidity in raw units |
+| `endTime` | `bigint` | ✅ | Unix timestamp when trading ends |
+| `baseMint` | `PublicKey` | ✅ | Collateral token mint address |
+
+**Returns**: `{ signature: string, market: PublicKey }`
 
 ---
 
@@ -554,13 +601,31 @@ Markets can be created with any SPL token. Pre-configured aliases:
 
 ## Script Quick Reference
 
-| Script | Purpose | Key Arguments |
-|--------|---------|---------------|
-| `create-market.ts` | Create new prediction market | `--question`, `--duration` (hours), `--liquidity`, `--type` (v2/p2p) |
-| `trade.ts` | Buy/sell outcome tokens | `--buy`/`--sell`, `--market`, `--outcome` (YES/NO), `--amount` |
-| `trade.ts --info` | Check market prices | `--market` (read-only, no wallet needed) |
-| `settle.ts` | Resolve market as oracle | `--market`, `--outcome` (YES/NO) |
-| `redeem.ts` | Claim winnings after settlement | `--market` |
+All scripts are located in `scripts/` and use `dotenv/config` to load environment variables from `.env`.
+
+| Script | Purpose | Run Command |
+|--------|---------|-------------|
+| `create-market.ts` | Create standard V2 AMM market | `tsx scripts/create-market.ts` |
+| `create-market-x.ts` | Create Twitter/X engagement market | `tsx scripts/create-market-x.ts` |
+| `create-market-yt.ts` | Create YouTube views market | `tsx scripts/create-market-yt.ts` |
+| `create-market-p2p.ts` | Create P2P betting market | `tsx scripts/create-market-p2p.ts` |
+| `create-market-custom.ts` | Create custom oracle market | `tsx scripts/create-market-custom.ts` |
+| `market-data.ts` | Fetch market info & settlement data | `tsx scripts/market-data.ts` |
+| `trade.ts` | Buy/sell outcome tokens | `tsx scripts/trade.ts --buy --market <addr> --outcome YES --amount 10` |
+| `settle.ts` | Resolve market as oracle | `tsx scripts/settle.ts --market <addr> --outcome YES` |
+| `redeem.ts` | Claim winnings after settlement | `tsx scripts/redeem.ts --market <addr>` |
+
+### Environment Setup
+
+Create a `.env` file in the root directory:
+
+```bash
+PRIVATE_KEY="your_base58_private_key_here"
+RPC_URL="https://api.mainnet-beta.solana.com"
+```
+
+> [!IMPORTANT]
+> All scripts require the `PRIVATE_KEY` environment variable. Use `PNPClient.parseSecretKey()` to handle both Base58 strings and Uint8Arrays.
 
 ---
 
