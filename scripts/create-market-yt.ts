@@ -21,7 +21,8 @@ async function main() {
     const youtubeUrl = 'https://youtu.be/rNv8K8AYGi8';
     const initialLiquidity = 1_000_000n; // 1 USDC (6 decimals)
     const endTime = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60); // 30 days
-    const collateralMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'); // USDC
+    // Collateral can be any SPL token or Token-2022 token — just pass the mint address.
+    const collateralMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'); // USDC (example)
 
     // Create YouTube-linked V2 market
     const result = await client.createMarketYoutube({

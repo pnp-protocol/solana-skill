@@ -65,9 +65,9 @@ const { market, signature } = await client.market.createMarket({
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `question` | `string` | Yes | The prediction question |
-| `initialLiquidity` | `bigint` | Yes | Collateral in raw units (e.g., `100_000_000n` = 100 USDC) |
+| `initialLiquidity` | `bigint` | Yes | Collateral in raw units (decimals depend on chosen token) |
 | `endTime` | `bigint` | Yes | Unix timestamp when trading ends |
-| `baseMint` | `PublicKey` | No | Collateral token mint (defaults to USDC) |
+| `baseMint` | `PublicKey` | No | Collateral token mint — any SPL or Token-2022 token |
 
 **Returns**: `{ market: PublicKey, signature: string }`
 

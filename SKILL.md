@@ -17,7 +17,7 @@ tags:
   - social-media
   - defi
   - info-finance
-compatibility: Requires Node.js 18+, Solana RPC endpoint (mainnet or devnet), funded wallet with SOL for transaction fees, and USDC or custom SPL token collateral
+compatibility: Requires Node.js 18+, Solana RPC endpoint (mainnet or devnet), funded wallet with SOL for transaction fees, and any SPL token (including Token-2022) as collateral
 ---
 
 # PNP Markets (Solana)
@@ -52,7 +52,7 @@ Do not use when:
 |------|---------|-------|
 | **PNP Program (Mainnet)** | `6fnYZUSyp3vJxTNnayq5S62d363EFaGARnqYux5bqrxb` | Main prediction market program |
 | **PNP Program (Devnet)** | `pnpkv2qnh4bfpGvTugGDSEhvZC7DP4pVxTuDykV3BGz` | Devnet testing program |
-| **USDC Mint** | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | Primary collateral (6 decimals) |
+| **USDC Mint** | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | Common collateral (6 decimals) |
 | **USDT Mint** | `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` | Alternative stable (6 decimals) |
 | **WSOL Mint** | `So11111111111111111111111111111111111111112` | Wrapped SOL (9 decimals) |
 
@@ -75,14 +75,14 @@ const endTime = daysFromNow(7);    // 7 days from now -> Unix timestamp as bigin
 ```
 
 > [!IMPORTANT]
-> **ALWAYS USE USDC** as the default collateral. Mint: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` (6 decimals). The SDK also supports any SPL token including Token-2022 tokens.
+> **Collateral can be any SPL token or Token-2022 token.** Pass the token's mint address as `baseMint` or `collateralTokenMint`. Make sure to use the correct decimals for the chosen token (e.g., USDC/USDT = 6, SOL = 9). Common mints are listed in the table above for reference.
 
 ---
 
 ## Prerequisites
 
 1. **Solana Wallet**: Base58-encoded private key with SOL for fees (~0.05 SOL minimum)
-2. **USDC Tokens**: Mainnet USDC for market liquidity
+2. **Collateral Tokens**: Any SPL token (including Token-2022) for market liquidity — USDC, USDT, SOL, or any custom token
 3. **RPC Endpoint**: Mainnet RPC URL (public or dedicated like Helius/QuickNode)
 
 ```bash
@@ -107,14 +107,15 @@ const client = new PNPClient(
   process.env.PRIVATE_KEY!  // Base58 string or Uint8Array
 );
 
+// Collateral can be any SPL token (including Token-2022) — use the mint address of your chosen token
 const USDC = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
 
 // Create a prediction market
 const result = await client.market.createMarket({
   question: 'Will Bitcoin reach $100K by end of 2025?',
-  initialLiquidity: 1_000_000n,  // 1 USDC (6 decimals)
+  initialLiquidity: 1_000_000n,  // 1 USDC (6 decimals) — adjust decimals for your collateral token
   endTime: BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60),
-  baseMint: USDC,
+  baseMint: USDC,  // Any SPL or Token-2022 mint
 });
 
 console.log('Market created:', result.market.toBase58());
@@ -269,9 +270,9 @@ console.log('Market:', result.market.toBase58());
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `question` | `string` | Yes | The prediction question |
-| `initialLiquidity` | `bigint` | Yes | Initial liquidity in raw units (6 decimals for USDC) |
+| `initialLiquidity` | `bigint` | Yes | Initial liquidity in raw units (decimals depend on collateral token) |
 | `endTime` | `bigint` | Yes | Unix timestamp when trading ends |
-| `baseMint` | `PublicKey` | No | Collateral token mint (defaults to USDC) |
+| `baseMint` | `PublicKey` | No | Collateral token mint — any SPL or Token-2022 token |
 
 ### Custom Oracle Market — `createMarketWithCustomOracle(params)`
 

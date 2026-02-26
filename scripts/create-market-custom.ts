@@ -18,11 +18,13 @@ async function main() {
     // Your oracle address (can be your wallet or a dedicated oracle service)
     const ORACLE_ADDRESS = client.signer!.publicKey;
 
+    // Collateral can be any SPL token or Token-2022 token — just pass the mint address.
+    // Adjust initialLiquidity decimals to match your chosen collateral token.
     const result = await client.createMarketWithCustomOracle({
         question: 'Will our product launch by Q2 2026?',
         initialLiquidity: 10_000_000n, // 10 USDC (6 decimals)
         endTime: BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60),
-        collateralMint: new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'),
+        collateralMint: new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'), // USDC (example)
         settlerAddress: ORACLE_ADDRESS,  // 👈 Your custom oracle!
         yesOddsBps: 5000,  // Optional: 50/50 odds (range: 100-9900)
     });
