@@ -28,7 +28,8 @@ if (!PRIVATE_KEY) {
     process.exit(1);
 }
 
-// Mainnet USDC
+// Collateral can be any SPL token or Token-2022 token.
+// Set COLLATERAL_MINT env var to use a different token, or defaults to USDC as an example.
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const COLLATERAL_MINT = new PublicKey(process.env.COLLATERAL_MINT || USDC_MINT);
 

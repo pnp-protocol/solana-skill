@@ -21,7 +21,7 @@ The SDK auto-detects the network from the RPC URL:
 
 | Token | Mint Address | Decimals | Notes |
 |-------|-------------|----------|-------|
-| **USDC** | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | 6 | Primary collateral — use by default |
+| **USDC** | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | 6 | Common stablecoin collateral |
 | **USDT** | `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` | 6 | Alternative stablecoin |
 | **WSOL** | `So11111111111111111111111111111111111111112` | 9 | Wrapped SOL |
 
