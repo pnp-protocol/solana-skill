@@ -10,7 +10,7 @@
     "redeem": "npx ts-node redeem.ts"
   },
   "dependencies": {
-    "pnp-sdk": "^0.2.10",
+    "pnp-sdk": "0.2.11",
     "@solana/web3.js": "^1.95.0",
     "bs58": "^5.0.0"
   },

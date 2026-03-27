@@ -1,5 +1,5 @@
 {
   "dependencies": {
-    "pnp-sdk": "^0.2.10"
+    "pnp-sdk": "0.2.11"
   }
 }
