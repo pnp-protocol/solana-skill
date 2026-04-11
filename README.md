@@ -69,7 +69,7 @@ solana-skill/
 
 | Network | Address |
 |---------|---------|
-| **Mainnet** | `6fnYZUSyp3vJxTNnayq5S62d363EFaGARnqYux5bqrxb` |
+| **Mainnet** | `8PyE2dizL52ga7ytqLtqRyjwWp4yXEx8M5Z4BAHgHuTb` |
 | **Devnet** | `pnpkv2qnh4bfpGvTugGDSEhvZC7DP4pVxTuDykV3BGz` |
 
 ## Requirements

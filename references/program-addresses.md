@@ -8,7 +8,7 @@ Complete reference for all program IDs, token mints, and Program Derived Address
 
 | Network | Program ID | Usage |
 |---------|-----------|-------|
-| **Mainnet** | `6fnYZUSyp3vJxTNnayq5S62d363EFaGARnqYux5bqrxb` | Production prediction market program |
+| **Mainnet** | `8PyE2dizL52ga7ytqLtqRyjwWp4yXEx8M5Z4BAHgHuTb` | Production prediction market program |
 | **Devnet** | `pnpkv2qnh4bfpGvTugGDSEhvZC7DP4pVxTuDykV3BGz` | Testing & development |
 
 The SDK auto-detects the network from the RPC URL:
@@ -37,7 +37,7 @@ All PDA functions are exported from `pnp-sdk` under the `pdas` namespace:
 import { pdas } from 'pnp-sdk';
 import { PublicKey } from '@solana/web3.js';
 
-const PROGRAM_ID = new PublicKey('6fnYZUSyp3vJxTNnayq5S62d363EFaGARnqYux5bqrxb');
+const PROGRAM_ID = new PublicKey('8PyE2dizL52ga7ytqLtqRyjwWp4yXEx8M5Z4BAHgHuTb');
 ```
 
 ### Global Config PDA
@@ -201,7 +201,7 @@ import { PNPClient, pdas } from 'pnp-sdk';
 import { PublicKey } from '@solana/web3.js';
 
 const client = new PNPClient('https://api.mainnet-beta.solana.com');
-const PROGRAM_ID = new PublicKey('6fnYZUSyp3vJxTNnayq5S62d363EFaGARnqYux5bqrxb');
+const PROGRAM_ID = new PublicKey('8PyE2dizL52ga7ytqLtqRyjwWp4yXEx8M5Z4BAHgHuTb');
 
 // Fetch a market
 const marketAddress = new PublicKey('HxnpHygK1v7TqodWqAv6RvcEiK9zxAgw5jPZ6rskgj2E');

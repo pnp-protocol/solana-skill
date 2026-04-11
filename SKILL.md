@@ -50,7 +50,7 @@ Do not use when:
 
 | Item | Address | Notes |
 |------|---------|-------|
-| **PNP Program (Mainnet)** | `6fnYZUSyp3vJxTNnayq5S62d363EFaGARnqYux5bqrxb` | Main prediction market program |
+| **PNP Program (Mainnet)** | `8PyE2dizL52ga7ytqLtqRyjwWp4yXEx8M5Z4BAHgHuTb` | Main prediction market program |
 | **PNP Program (Devnet)** | `pnpkv2qnh4bfpGvTugGDSEhvZC7DP4pVxTuDykV3BGz` | Devnet testing program |
 | **USDC Mint** | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | Common collateral (6 decimals) |
 | **USDT Mint** | `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` | Alternative stable (6 decimals) |
